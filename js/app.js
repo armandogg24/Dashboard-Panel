@@ -1,8 +1,11 @@
 import {
   initApp, observarAuth, iniciarSesion, cerrarSesion,
+  detectarRol, obtenerRol,
   cargarSubscriptores, crearSuscriptor, guardarSuscriptor, eliminarSuscriptor,
   alternarCancelado, renovarSuscriptor, cargarReferidos,
   cargarConfig, guardarConfig,
+  cargarVendedores, crearVendedorDoc, guardarVendedor,
+  alternarVendedor, eliminarVendedor,
   diasRestantes, addMeses, hoyISO, formatearFecha, estadoDe, sugerirCobro
 } from "./db.js";
 import { firebaseConfig, ADMIN_UID } from "./config.js";
@@ -12,6 +15,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   subs: [],
   refs: [],
+  vendedores: [],
   filtro: "todos",
   busqueda: "",
   subEditando: null,
@@ -19,12 +23,21 @@ const state = {
   config: null
 };
 
+const esAdmin = () => obtenerRol() === "admin";
+
 const esPlaceholder = (v) => !v || String(v).startsWith("REEMPLAZA");
 const esCancelado = (s) => s.estado_override === "cancelado";
 const subsPorId = () => Object.fromEntries(state.subs.map(s => [s.id, s]));
+const vendPorId = () => Object.fromEntries(state.vendedores.map(v => [v.id, v]));
+const nombreVendedor = (id) => {
+  if (!id || id === "admin") return "";
+  const v = vendPorId()[id];
+  return v ? v.nombre : "(vendedor eliminado)";
+};
 const nombreDe = (id) => {
   const s = subsPorId()[id];
-  return s ? s.nombre : "(eliminado)";
+  if (s) return s.nombre;
+  return esAdmin() ? "(eliminado)" : "(de otro vendedor)";
 };
 
 function toast(mensaje, tipo = "ok") {
@@ -55,25 +68,50 @@ function mostrarLogin() {
 }
 
 async function entrarApp(usuario) {
+  let rol;
+  try {
+    rol = await detectarRol(usuario);
+  } catch {
+    rol = null;
+  }
+
+  if (!rol || rol === "suspendido" || rol === "nulo") {
+    await cerrarSesion();
+    const err = $("login-error");
+    err.textContent = rol === "suspendido"
+      ? "Cuenta suspendida. Contactá al administrador."
+      : "Esta cuenta no tiene acceso al panel.";
+    err.classList.remove("oculto");
+    return mostrarLogin();
+  }
+
+  document.body.dataset.rol = rol;
+  const esAdminUI = rol === "admin";
+  $("tab-vendedores").classList.toggle("oculto", !esAdminUI);
+  document.querySelector('[data-vista="config"]')
+    ?.classList.toggle("oculto", !esAdminUI);
+
   $("vista-login").classList.add("oculto");
   $("app").classList.remove("oculto");
   $("usuario-correo").textContent = usuario.email;
+  cambiarVista("dashboard");
   await recargarDatos();
 }
 
 async function recargarDatos() {
   try {
-    const [subs, refs, config] = await Promise.all([
-      cargarSubscriptores(), cargarReferidos(), cargarConfig()
-    ]);
+    const tareas = [cargarSubscriptores(), cargarReferidos(), cargarConfig()];
+    if (esAdmin()) tareas.push(cargarVendedores());
+    const [subs, refs, config, vendedores] = await Promise.all(tareas);
     state.subs = subs;
     state.refs = refs;
     state.config = config;
+    if (vendedores) state.vendedores = vendedores;
     renderTodo();
   } catch (err) {
     console.error(err);
     if (String(err.code || "").includes("permission-denied")) {
-      toast("Permiso denegado: verifica tu UID en firestore.rules y js/config.js", "err");
+      toast("Permiso denegado: verificá reglas de Firestore o tu rol.", "err");
     } else {
       toast("Error cargando datos: " + err.message, "err");
     }
@@ -81,6 +119,7 @@ async function recargarDatos() {
 }
 
 function cambiarVista(nombre) {
+  if (!esAdmin() && (nombre === "config" || nombre === "vendedores")) return;
   document.querySelectorAll(".seccion").forEach(s => s.classList.add("oculto"));
   $(`sec-${nombre}`).classList.remove("oculto");
   document.querySelectorAll("#nav-botones .tab").forEach(t =>
@@ -91,6 +130,7 @@ function renderTodo() {
   renderDashboard();
   renderTabla();
   renderReferidos();
+  if (esAdmin()) renderVendedores();
   renderConfigInputs();
 }
 
@@ -159,11 +199,15 @@ function renderTabla() {
     const accionCancel = esCancelado(s)
       ? { acc: "reactivar", txt: "Reactivar" }
       : { acc: "cancelar", txt: "Cancelar" };
+    const vend = nombreVendedor(s.vendedor_id);
+    const vendCell = vend
+      ? `<span class="chip-vend">${escapar(vend)}</span>` : '<span class="muted">—</span>';
     return `<tr${esCancelado(s) ? ' class="cancelada"' : ""}><td><strong>${escapar(s.nombre)}</strong><br>
       <span class="codigo-chip">${s.referral_code}</span></td>
       <td>${escapar(s.plan || "—")}</td>
       <td>${formatearFecha(s.fecha_vencimiento)}</td>
       <td><span class="badge ${est.cls}">${est.label}</span></td>
+      <td class="col-vendedor">${vendCell}</td>
       <td>${refBy}</td>
       <td>${saldo}</td>
       <td><div class="acciones">
@@ -202,12 +246,56 @@ function saldoVigente(id) {
   return s ? `<span class="saldo-chip">${s.descuento_acumulado || 0}%</span>` : "—";
 }
 
+function renderVendedores() {
+  const clientesDe = (uid) => state.subs.filter(s =>
+    (s.vendedor_id || "admin") === uid).length;
+
+  $("tb-vend").innerHTML = state.vendedores.map(v => {
+    const badge = v.activo
+      ? '<span class="badge b-activo">Activo</span>'
+      : '<span class="badge b-suspendido">Suspendido</span>';
+    const accion = v.activo ? "Suspender" : "Reactivar";
+    return `<tr><td><strong>${escapar(v.nombre)}</strong></td>
+      <td class="muted">${escapar(v.email || "—")}</td>
+      <td>${badge}</td>
+      <td>${clientesDe(v.id)}</td>
+      <td><input type="text" class="in-chat" data-chat="${v.id}"
+           value="${escapar(v.telegram_chat_id || "")}" placeholder="chat_id"></td>
+      <td><div class="acciones">
+        <button class="btn btn-mini btn-fantasma" data-vacc="guardar-chat" data-uid="${v.id}">Guardar chat</button>
+        <button class="btn btn-mini btn-fantasma" data-vacc="${v.activo ? "suspender" : "reactivar"}" data-uid="${v.id}">${accion}</button>
+        <button class="btn btn-mini btn-peligro" data-vacc="borrar" data-uid="${v.id}">Borrar</button>
+      </div></td></tr>`;
+  }).join("");
+  $("cont-vend").textContent = `${state.vendedores.length} vendedor(es)`;
+}
+
+function abrirDialogoVendedor() {
+  $("v-uid").value = "";
+  $("v-nombre").value = "";
+  $("v-email").value = "";
+  $("v-chat").value = "";
+  $("vend-error").classList.add("oculto");
+  $("dlg-vend").showModal();
+}
+
 function renderConfigInputs() {
   if (!state.config) return;
   $("cfg-porcentaje").value = state.config.porcentaje_por_referido;
   $("cfg-tope").value = state.config.tope_maximo;
   $("cfg-nota").textContent =
     `Regla vigente: cada referido exitoso suma ${state.config.porcentaje_por_referido}% al referente, con tope de ${state.config.tope_maximo}%.`;
+}
+
+function poblarVendedor(valor) {
+  const sel = $("f-vendedor");
+  sel.innerHTML = '<option value="admin">Panel (vos)</option>' +
+    state.vendedores
+      .filter(v => v.activo !== false)
+      .map(v => `<option value="${escapar(v.id)}">${escapar(v.nombre)}</option>`)
+      .join("");
+  sel.value = state.vendedores.some(v => v.id === valor && v.activo !== false)
+    ? valor : "admin";
 }
 
 function abrirDialogoNuevo() {
@@ -218,6 +306,8 @@ function abrirDialogoNuevo() {
   $("f-precio").value = "";
   $("f-inicio").value = hoyISO();
   $("f-fin").value = addMeses(hoyISO(), 1);
+  $("grupo-vendedor").classList.toggle("oculto", !esAdmin());
+  poblarVendedor("admin");
   $("f-codigo").value = "";
   $("grupo-codigo").classList.remove("oculto");
   $("sub-error").classList.add("oculto");
@@ -232,6 +322,8 @@ function abrirDialogoEditar(sub) {
   $("f-precio").value = sub.precio ?? "";
   $("f-inicio").value = sub.fecha_inicio;
   $("f-fin").value = sub.fecha_vencimiento;
+  $("grupo-vendedor").classList.toggle("oculto", !esAdmin());
+  if (esAdmin()) poblarVendedor(sub.vendedor_id || "admin");
   $("grupo-codigo").classList.add("oculto");
   $("sub-error").classList.add("oculto");
   $("dlg-sub").showModal();
@@ -347,6 +439,7 @@ function conectarEventos() {
       fecha_inicio: $("f-inicio").value,
       fecha_vencimiento: $("f-fin").value
     };
+    if (esAdmin()) datos.vendedor_id = $("f-vendedor").value || "admin";
 
     if (!datos.nombre) return mostrarErrorSub("El nombre es obligatorio.");
     if (!datos.fecha_inicio || !datos.fecha_vencimiento)
@@ -415,6 +508,73 @@ function conectarEventos() {
       toast("Error: " + ex.message, "err");
     }
   });
+
+  $("btn-nuevo-vendedor").addEventListener("click", abrirDialogoVendedor);
+
+  $("form-vend").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errEl = $("vend-error");
+    errEl.classList.add("oculto");
+
+    const uid = $("v-uid").value.trim();
+    if (!/^[a-zA-Z0-9]{20,128}$/.test(uid))
+      return mostrarErrorVend("El UID parece inválido (debe venir de Firebase Authentication).");
+
+    try {
+      const existente = state.vendedores.find(v => v.id === uid);
+      if (existente) return mostrarErrorVend("Ese UID ya está registrado como vendedor.");
+      await crearVendedorDoc({
+        uid,
+        nombre: $("v-nombre").value,
+        email: $("v-email").value,
+        telegram_chat_id: $("v-chat").value
+      });
+      $("dlg-vend").close();
+      toast("Vendedor registrado.");
+      await recargarDatos();
+    } catch (ex) {
+      mostrarErrorVend(ex.message);
+    }
+
+    function mostrarErrorVend(msg) {
+      errEl.textContent = msg;
+      errEl.classList.remove("oculto");
+    }
+  });
+
+  $("tb-vend").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-vacc]");
+    if (!btn) return;
+    const uid = btn.dataset.uid;
+    const v = vendPorId()[uid];
+    if (!v) return;
+    const acc = btn.dataset.vacc;
+    try {
+      if (acc === "guardar-chat") {
+        const input = document.querySelector(`input[data-chat="${uid}"]`);
+        await guardarVendedor(uid, {
+          telegram_chat_id: input.value.trim() || null
+        });
+        toast("chat_id actualizado.");
+        await recargarDatos();
+      } else if (acc === "suspender" || acc === "reactivar") {
+        btn.disabled = true;
+        await alternarVendedor(v);
+        toast(acc === "suspender" ? "Vendedor suspendido." : "Vendedor reactivado.");
+        await recargarDatos();
+      } else if (acc === "borrar") {
+        const n = state.subs.filter(s => (s.vendedor_id || "admin") === uid).length;
+        if (!confirm(`¿Eliminar a "${v.nombre}"? Sus ${n} cliente(s) quedarán bajo tu control directo.`)) return;
+        btn.disabled = true;
+        await eliminarVendedor(uid);
+        toast("Vendedor eliminado.");
+        await recargarDatos();
+      }
+    } catch (err) {
+      toast("Error: " + err.message, "err");
+      btn.disabled = false;
+    }
+  });
 }
 
 validarConfiguracion();
@@ -423,12 +583,5 @@ conectarEventos();
 
 observarAuth(async (usuario) => {
   if (!usuario) return mostrarLogin();
-  if (!esPlaceholder(ADMIN_UID) && usuario.uid !== ADMIN_UID) {
-    await cerrarSesion();
-    const err = $("login-error");
-    err.textContent = "Esta cuenta no es el administrador configurado.";
-    err.classList.remove("oculto");
-    return mostrarLogin();
-  }
   await entrarApp(usuario);
 });

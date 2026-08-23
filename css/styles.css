@@ -405,6 +405,27 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 .tabla tbody tr.cancelada td { opacity: .55; }
 
+.col-vendedor { white-space: nowrap; }
+.chip-vend {
+  font-size: .78em;
+  background: rgba(251, 191, 36, .12);
+  border: 1px solid rgba(251, 191, 36, .3);
+  color: var(--aviso);
+  padding: .12rem .5rem;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+body[data-rol="vendedor"] .col-vendedor { display: none; }
+
+.in-chat {
+  width: 9rem;
+  margin-top: 0;
+  padding: .35rem .55rem;
+  font-size: .85rem;
+}
+
+.b-suspendido { background: rgba(148, 163, 184, .16); color: #cbd5e1; }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
   html { scroll-behavior: auto; }

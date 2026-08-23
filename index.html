@@ -7,6 +7,13 @@
 <title>Panel · Suscriptores</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236366f1'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='24' fill='%230a0e17'/%3E%3Cpath d='M25 62l14-14 12 10 24-26' stroke='url(%23g)' stroke-width='9' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="css/styles.css">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#0a0e17">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Panel">
 </head>
 <body>
 
@@ -19,7 +26,7 @@
 <section id="vista-login" class="centrar oculto">
   <div class="glass tarjeta-login">
     <h1 class="marca">Panel<span>Suscriptores</span></h1>
-    <p class="sub">Acceso exclusivo del administrador</p>
+    <p class="sub">Acceso exclusivo del personal autorizado</p>
     <form id="form-login" autocomplete="on">
       <label>Correo
         <input type="email" id="login-correo" required placeholder="tu@correo.com" autocomplete="username">
@@ -40,6 +47,7 @@
       <button class="tab activo" data-vista="dashboard">Resumen</button>
       <button class="tab" data-vista="suscriptores">Suscriptores</button>
       <button class="tab" data-vista="referidos">Referidos</button>
+      <button class="tab oculto" id="tab-vendedores" data-vista="vendedores">Vendedores</button>
       <button class="tab" data-vista="config">Configuración</button>
     </nav>
     <div class="sesion">
@@ -77,7 +85,7 @@
       <div class="glass bloque">
         <div class="scroll-x">
           <table class="tabla">
-            <thead><tr><th>Nombre</th><th>Plan</th><th>Vence</th><th>Estado</th><th>Referido por</th><th>Saldo</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Plan</th><th>Vence</th><th>Estado</th><th class="col-vendedor">Vendedor</th><th>Referido por</th><th>Saldo</th><th>Acciones</th></tr></thead>
             <tbody id="tb-subs"></tbody>
           </table>
         </div>
@@ -101,6 +109,22 @@
           <h2>Top referentes</h2>
           <ol id="top-refs" class="lista-top"></ol>
         </div>
+      </div>
+    </section>
+
+    <section id="sec-vendedores" class="seccion oculto">
+      <div class="barra-tabla">
+        <p class="muted">Los usuarios se crean primero en Firebase Console → Authentication → Add user; luego registrá su UID acá.</p>
+        <button id="btn-nuevo-vendedor" class="btn btn-primario">Nuevo vendedor</button>
+      </div>
+      <div class="glass bloque">
+        <div class="scroll-x">
+          <table class="tabla">
+            <thead><tr><th>Nombre</th><th>Email</th><th>Estado</th><th>Clientes</th><th>Telegram chat_id</th><th>Acciones</th></tr></thead>
+            <tbody id="tb-vend"></tbody>
+          </table>
+        </div>
+        <p id="cont-vend" class="pie-tabla muted"></p>
       </div>
     </section>
 
@@ -144,6 +168,10 @@
         <input type="date" id="f-fin" required>
       </label>
     </div>
+    <label id="grupo-vendedor">Vendedor
+      <select id="f-vendedor"></select>
+      <small class="muted">Dejá en "Panel (vos)" para clientes que gestionás tú.</small>
+    </label>
     <label id="grupo-codigo">Código de referido (opcional)
       <input type="text" id="f-codigo" maxlength="6" placeholder="ABC123" style="text-transform:uppercase">
       <small class="muted" id="f-codigo-hint">Si es válido, el referente suma su % al momento.</small>
@@ -172,10 +200,41 @@
   </form>
 </dialog>
 
+<dialog id="dlg-vend">
+  <form id="form-vend">
+    <h2>Nuevo vendedor</h2>
+    <label>UID de Firebase Auth *
+      <input type="text" id="v-uid" required minlength="20" placeholder="Pegá el UID de Authentication">
+      <small class="muted">Consola → Authentication → Users → columna UID del usuario</small>
+    </label>
+    <label>Nombre *
+      <input type="text" id="v-nombre" required maxlength="60" placeholder="María Gómez">
+    </label>
+    <label>Email
+      <input type="email" id="v-email" placeholder="maria@correo.com">
+    </label>
+    <label>Telegram chat_id (opcional)
+      <input type="text" id="v-chat" placeholder="123456789">
+      <small class="muted">Para que reciba las alertas de SUS clientes. Obtenelo con @userinfobot.</small>
+    </label>
+    <p id="vend-error" class="error oculto"></p>
+    <div class="dialogo-acciones">
+      <button type="button" class="btn btn-fantasma" data-cerrar>Cancelar</button>
+      <button type="submit" id="btn-guardar-vend" class="btn btn-primario">Registrar vendedor</button>
+    </div>
+  </form>
+</dialog>
+
 <div id="toasts" aria-live="polite"></div>
 
 <noscript><p style="padding:2rem;text-align:center">Este panel requiere JavaScript habilitado.</p></noscript>
 
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () =>
+      navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+</script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

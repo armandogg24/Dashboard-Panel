@@ -7,13 +7,13 @@ const UMBRALES = [
 ];
 
 const TOKEN = process.env.TELEGRAM_TOKEN;
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const ADMIN_CHAT = process.env.TELEGRAM_CHAT_ID;
 const SA_JSON = process.env.FIREBASE_SERVICE_ACCOUNT;
 
 for (const [nombre, valor] of [
   ["FIREBASE_SERVICE_ACCOUNT", SA_JSON],
   ["TELEGRAM_TOKEN", TOKEN],
-  ["TELEGRAM_CHAT_ID", CHAT_ID]
+  ["TELEGRAM_CHAT_ID", ADMIN_CHAT]
 ]) {
   if (!valor) {
     console.error(`Falta el secret ${nombre}`);
@@ -34,7 +34,7 @@ const escapar = (t) =>
 
 const dormir = (ms) => new Promise(r => setTimeout(r, ms));
 
-async function enviarTelegram(texto) {
+async function enviarTelegram(chatId, texto) {
   const url = `https://api.telegram.org/bot${TOKEN}/sendMessage`;
   for (let intento = 1; intento <= 2; intento++) {
     try {
@@ -42,7 +42,7 @@ async function enviarTelegram(texto) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chat_id: CHAT_ID,
+          chat_id: chatId,
           text: texto,
           parse_mode: "HTML",
           disable_web_page_preview: true
@@ -53,7 +53,7 @@ async function enviarTelegram(texto) {
       throw new Error(`HTTP ${res.status}: ${cuerpo.description || "sin detalle"}`);
     } catch (err) {
       if (intento === 2) {
-        console.error(`   Error enviando mensaje: ${err.message}`);
+        console.error(`   Error enviando a ${chatId}: ${err.message}`);
         return false;
       }
       await dormir(1500);
@@ -73,10 +73,28 @@ try {
 
 const base = admin.firestore();
 const hoy = hoyISO();
+
+const snapVend = await base.collection("vendedores").get();
+const vendedores = new Map(
+  snapVend.docs.map(d => [d.id, { ...d.data(), id: d.id }])
+);
+
+const snap = await base.collection("subscribers").get();
 let enviados = 0, fallidos = 0, omitidos = 0;
 const detalle = [];
 
-const snap = await base.collection("subscribers").get();
+async function entregar(chats, texto) {
+  const destinos = [...new Set(chats.filter(Boolean))];
+  let ok = false;
+  const fallosDestino = [];
+  for (const chat of destinos) {
+    const logrado = await enviarTelegram(chat, texto);
+    if (logrado) ok = true;
+    else fallosDestino.push(chat);
+    await dormir(400);
+  }
+  return { ok, fallosDestino };
+}
 
 for (const docRef of snap.docs) {
   const sub = docRef.data();
@@ -96,23 +114,40 @@ for (const docRef of snap.docs) {
     continue;
   }
 
+  const vid = sub.vendedor_id || "admin";
+  const vend = vid === "admin" ? null : vendedores.get(vid);
+  const nombreVendedor = vid === "admin"
+    ? "Panel (admin)"
+    : (vend ? `${vend.nombre}` : `vendedor ${vid}`);
+
   const saldo = sub.descuento_acumulado || 0;
   let texto =
     `📅 <b>Suscripción por vencer</b>\n\n` +
     `👤 <b>${escapar(nombre)}</b>\n` +
     `🗓 Vence: <b>${sub.fecha_vencimiento}</b>\n` +
-    `⏳ Faltan: <b>${umbral.texto}</b>`;
+    `⏳ Faltan: <b>${umbral.texto}</b>` +
+    `\n🏪 Vendedor: ${escapar(nombreVendedor)}`;
   if (sub.plan) texto += `\n📦 Plan: ${escapar(sub.plan)}`;
   if (saldo > 0) texto += `\n🎁 Saldo por referidos: <b>${saldo}%</b>`;
 
-  const ok = await enviarTelegram(texto);
+  const chats = [ADMIN_CHAT];
+  if (vend && vend.activo !== false && vend.telegram_chat_id) {
+    chats.push(vend.telegram_chat_id);
+  }
+
+  const { ok, fallosDestino } = await entregar(chats, texto);
+
   if (ok) {
     await docRef.ref.update({
       notificados: admin.firestore.FieldValue.arrayUnion(umbral.etiqueta)
     });
     enviados++;
-    detalle.push(`- ✅ \`${escapar(nombre)}\` · vence en ${umbral.texto}`);
+    const extra = fallosDestino.length
+      ? ` ⚠️ falló destino: ${fallosDestino.join(", ")}`
+      : "";
+    detalle.push(`- ✅ \`${escapar(nombre)}\` · ${umbral.texto}${extra}`);
     console.log(`Enviado: ${nombre} (${umbral.texto})`);
+    if (fallosDestino.length) fallidos++;
   } else {
     fallidos++;
     detalle.push(`- ❌ \`${escapar(nombre)}\` · fallo al enviar`);
@@ -123,13 +158,13 @@ for (const docRef of snap.docs) {
 
 const resumen =
   `Suscriptores revisados: ${snap.size}\n` +
-  `Mensajes enviados: ${enviados} · Omitidos (ya avisados): ${omitidos} · Fallidos: ${fallidos}`;
+  `Avisos procesados: ${enviados} · Omitidos (ya avisados): ${omitidos} · Con fallos: ${fallidos}`;
 console.log("\n" + resumen);
 
 if (process.env.GITHUB_STEP_SUMMARY) {
   const md =
     `## Resumen de notificaciones (${hoy})\n\n` +
-    `| Revisados | Enviados | Omitidos | Fallidos |\n|---|---|---|---|\n` +
+    `| Revisados | Enviados | Omitidos | Con fallos |\n|---|---|---|---|\n` +
     `| ${snap.size} | ${enviados} | ${omitidos} | ${fallidos} |\n\n` +
     (detalle.length ? detalle.join("\n") : "_Nada que notificar hoy._") + "\n";
   const fs = await import("node:fs");

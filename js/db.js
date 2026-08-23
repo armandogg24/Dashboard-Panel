@@ -3,26 +3,67 @@ import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, doc, getDoc, getDocs, addDoc, setDoc,
-  updateDoc, deleteDoc, query, where, limit, serverTimestamp, arrayUnion
+  initializeFirestore, getFirestore, persistentLocalCache,
+  persistentMultipleTabManager, collection, doc, getDoc, getDocs,
+  addDoc, setDoc, updateDoc, deleteDoc, query, where, limit,
+  serverTimestamp, arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { ADMIN_UID } from "./config.js";
 
 const COL_SUBS = "subscribers";
 const COL_REFS = "referrals";
+const COL_VEND = "vendedores";
 
 let _db = null;
 let _auth = null;
+let _uid = null;
+let _rol = null;
 let _config = null;
+
+function iniciarFirestore(app) {
+  try {
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager()
+      })
+    });
+  } catch (err) {
+    console.warn("Persistencia offline no disponible:", err.message);
+    return getFirestore(app);
+  }
+}
 
 export function initApp(firebaseConfig) {
   const app = initializeApp(firebaseConfig);
-  _db = getFirestore(app);
+  _db = iniciarFirestore(app);
   _auth = getAuth(app);
 }
 
 export function observarAuth(cb) { return onAuthStateChanged(_auth, cb); }
 export function iniciarSesion(correo, clave) { return signInWithEmailAndPassword(_auth, correo, clave); }
-export function cerrarSesion() { return signOut(_auth); }
+export async function cerrarSesion() {
+  _rol = null;
+  _uid = null;
+  await signOut(_auth);
+}
+
+export async function detectarRol(usuario) {
+  _uid = usuario.uid;
+  const snap = await getDoc(doc(_db, COL_VEND, usuario.uid));
+  if (snap.exists()) {
+    _rol = snap.data().activo === false ? "suspendido" : "vendedor";
+    return _rol;
+  }
+  if (usuario.uid === ADMIN_UID) {
+    _rol = "admin";
+    return "admin";
+  }
+  _rol = "nulo";
+  return null;
+}
+
+export function obtenerRol() { return _rol; }
+export function uidActual() { return _uid; }
 
 export function hoyISO() {
   const h = new Date();
@@ -76,9 +117,24 @@ function generarCodigo() {
 
 const subsRef = () => collection(_db, COL_SUBS);
 const refsRef = () => collection(_db, COL_REFS);
+const vendRef = () => collection(_db, COL_VEND);
+
+async function consultarSubscriptores() {
+  if (_rol === "admin") return getDocs(subsRef());
+  return getDocs(query(subsRef(), where("vendedor_id", "==", _uid)));
+}
 
 export async function buscarPorCodigo(codigo) {
-  const q = query(subsRef(), where("referral_code", "==", codigo), limit(1));
+  const buscado = (codigo || "").trim().toUpperCase();
+  if (!buscado) return null;
+  const q = _rol === "admin"
+    ? query(subsRef(), where("referral_code", "==", buscado), limit(1))
+    : query(
+        subsRef(),
+        where("vendedor_id", "==", _uid),
+        where("referral_code", "==", buscado),
+        limit(1)
+      );
   const snap = await getDocs(q);
   return snap.empty ? null : snap.docs[0];
 }
@@ -105,8 +161,38 @@ export async function guardarConfig(nueva) {
 }
 
 export async function cargarSubscriptores() {
-  const snap = await getDocs(subsRef());
+  const snap = await consultarSubscriptores();
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function cargarVendedores() {
+  const snap = await getDocs(vendRef());
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+}
+
+export async function crearVendedorDoc(datos) {
+  await setDoc(doc(vendRef(), datos.uid), {
+    nombre: datos.nombre.trim(),
+    email: datos.email.trim(),
+    telegram_chat_id: datos.telegram_chat_id?.trim() || null,
+    activo: true,
+    creado: serverTimestamp()
+  });
+}
+
+export async function guardarVendedor(uid, campos) {
+  await updateDoc(doc(vendRef(), uid), campos);
+}
+
+export async function alternarVendedor(v) {
+  await updateDoc(doc(vendRef(), v.id), { activo: !v.activo });
+  return !v.activo;
+}
+
+export async function eliminarVendedor(uid) {
+  await deleteDoc(doc(vendRef(), uid));
 }
 
 export async function crearSuscriptor(datos, codigoReferido) {
@@ -123,8 +209,11 @@ export async function crearSuscriptor(datos, codigoReferido) {
     nuevoCodigo = generarCodigo();
   }
 
+  const vendedorAsignado = _rol === "admin" ? "admin" : _uid;
+
   const refNuevo = await addDoc(subsRef(), {
     ...datos,
+    vendedor_id: vendedorAsignado,
     referral_code: nuevoCodigo,
     referred_by: referente ? referente.id : null,
     descuento_acumulado: 0,
