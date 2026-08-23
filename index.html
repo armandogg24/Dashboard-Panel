@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Panel de gestión de suscriptores con alertas Telegram y sistema de referidos">
+<title>Panel · Suscriptores</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236366f1'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='24' fill='%230a0e17'/%3E%3Cpath d='M25 62l14-14 12 10 24-26' stroke='url(%23g)' stroke-width='9' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="aviso-config" class="aviso oculto">
+  <strong>Configuración pendiente</strong>
+  <ul id="aviso-lista"></ul>
+  <p>Sigue las guías en orden: <code>docs/setup-firebase.md</code> → <code>setup-telegram.md</code> → <code>setup-github.md</code></p>
+</div>
+
+<section id="vista-login" class="centrar oculto">
+  <div class="glass tarjeta-login">
+    <h1 class="marca">Panel<span>Suscriptores</span></h1>
+    <p class="sub">Acceso exclusivo del administrador</p>
+    <form id="form-login" autocomplete="on">
+      <label>Correo
+        <input type="email" id="login-correo" required placeholder="tu@correo.com" autocomplete="username">
+      </label>
+      <label>Contraseña
+        <input type="password" id="login-clave" required placeholder="••••••••" autocomplete="current-password">
+      </label>
+      <p id="login-error" class="error oculto"></p>
+      <button type="submit" id="btn-login" class="btn btn-primario btn-ancho">Iniciar sesión</button>
+    </form>
+  </div>
+</section>
+
+<div id="app" class="oculto">
+  <header class="topbar glass">
+    <div class="marca marca-mini">Panel<span>Suscriptores</span></div>
+    <nav id="nav-botones" aria-label="Secciones">
+      <button class="tab activo" data-vista="dashboard">Resumen</button>
+      <button class="tab" data-vista="suscriptores">Suscriptores</button>
+      <button class="tab" data-vista="referidos">Referidos</button>
+      <button class="tab" data-vista="config">Configuración</button>
+    </nav>
+    <div class="sesion">
+      <span id="usuario-correo" class="muted"></span>
+      <button id="btn-salir" class="btn btn-fantasma">Salir</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="sec-dashboard" class="seccion">
+      <div id="cards" class="grid-cards">
+        <article class="glass stat"><span class="stat-num" id="st-activos">–</span><span class="stat-lbl">Activos</span></article>
+        <article class="glass stat"><span class="stat-num aviso-num" id="st-vencer">–</span><span class="stat-lbl">Por vencer (7 días)</span></article>
+        <article class="glass stat"><span class="stat-num mal-num" id="st-vencidos">–</span><span class="stat-lbl">Vencidos</span></article>
+        <article class="glass stat"><span class="stat-num ok-num" id="st-saldo">–</span><span class="stat-lbl">Saldo referidos</span></article>
+      </div>
+      <div class="glass bloque">
+        <h2>Próximos vencimientos</h2>
+        <ul id="lista-proximos" class="lista-prox"></ul>
+        <p id="dash-vacio" class="vacio oculto">Sin suscripciones próximas a vencer.</p>
+      </div>
+    </section>
+
+    <section id="sec-suscriptores" class="seccion oculto">
+      <div class="barra-tabla">
+        <input type="search" id="busqueda" placeholder="Buscar nombre o código…">
+        <div id="chips" class="chips">
+          <button class="chip activo" data-filtro="todos">Todos</button>
+          <button class="chip" data-filtro="porvencer">Por vencer</button>
+          <button class="chip" data-filtro="vencidos">Vencidos</button>
+          <button class="chip" data-filtro="cancelados">Cancelados</button>
+        </div>
+        <button id="btn-nuevo" class="btn btn-primario">Nuevo suscriptor</button>
+      </div>
+      <div class="glass bloque">
+        <div class="scroll-x">
+          <table class="tabla">
+            <thead><tr><th>Nombre</th><th>Plan</th><th>Vence</th><th>Estado</th><th>Referido por</th><th>Saldo</th><th>Acciones</th></tr></thead>
+            <tbody id="tb-subs"></tbody>
+          </table>
+        </div>
+        <p id="cont-subs" class="pie-tabla muted"></p>
+      </div>
+    </section>
+
+    <section id="sec-referidos" class="seccion oculto">
+      <div class="referidos-grid">
+        <div class="glass bloque">
+          <h2>Historial de referidos</h2>
+          <div class="scroll-x">
+            <table class="tabla">
+              <thead><tr><th>Fecha</th><th>Referente</th><th>Saldo actual</th><th>Referido</th><th>% otorgado</th></tr></thead>
+              <tbody id="tb-refs"></tbody>
+            </table>
+          </div>
+          <p id="refs-vacio" class="vacio oculto">Todavía no hay referidos registrados.</p>
+        </div>
+        <div class="glass bloque">
+          <h2>Top referentes</h2>
+          <ol id="top-refs" class="lista-top"></ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-config" class="seccion oculto">
+      <div class="glass bloque bloque-angosto">
+        <h2>Parámetros de referidos</h2>
+        <form id="form-config">
+          <label>% por cada referido exitoso
+            <input type="number" id="cfg-porcentaje" min="1" max="100" required>
+          </label>
+          <label>Tope máximo acumulable (%)
+            <input type="number" id="cfg-tope" min="1" max="100" required>
+          </label>
+          <p id="cfg-nota" class="nota muted"></p>
+          <button type="submit" class="btn btn-primario">Guardar configuración</button>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlg-sub">
+  <form id="form-sub">
+    <h2 id="dlg-sub-titulo">Nuevo suscriptor</h2>
+    <label>Nombre *
+      <input type="text" id="f-nombre" required maxlength="80" placeholder="Nombre y apellido">
+    </label>
+    <div class="fila-2">
+      <label>Plan
+        <input type="text" id="f-plan" maxlength="30" placeholder="mensual">
+      </label>
+      <label>Precio (opcional)
+        <input type="number" id="f-precio" min="0" step="0.01" placeholder="500">
+      </label>
+    </div>
+    <div class="fila-2">
+      <label>Inicio *
+        <input type="date" id="f-inicio" required>
+      </label>
+      <label>Vencimiento *
+        <input type="date" id="f-fin" required>
+      </label>
+    </div>
+    <label id="grupo-codigo">Código de referido (opcional)
+      <input type="text" id="f-codigo" maxlength="6" placeholder="ABC123" style="text-transform:uppercase">
+      <small class="muted" id="f-codigo-hint">Si es válido, el referente suma su % al momento.</small>
+    </label>
+    <p id="sub-error" class="error oculto"></p>
+    <div class="dialogo-acciones">
+      <button type="button" class="btn btn-fantasma" data-cerrar>Cancelar</button>
+      <button type="submit" id="btn-guardar-sub" class="btn btn-primario">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-renovar">
+  <form id="form-renovar">
+    <h2>Renovar suscripción</h2>
+    <div id="r-info" class="r-info"></div>
+    <label>Meses a extender
+      <input type="number" id="r-meses" min="1" max="24" value="1" required>
+    </label>
+    <p id="r-cobro" class="nota"></p>
+    <p class="muted nota">El saldo de referidos se aplicará y volverá a cero tras renovar.</p>
+    <div class="dialogo-acciones">
+      <button type="button" class="btn btn-fantasma" data-cerrar>Cancelar</button>
+      <button type="submit" id="btn-confirmar-renovar" class="btn btn-primario">Confirmar renovación</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toasts" aria-live="polite"></div>
+
+<noscript><p style="padding:2rem;text-align:center">Este panel requiere JavaScript habilitado.</p></noscript>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+name: Mantenimiento
+
+on:
+  schedule:
+    - cron: "0 14 * * *"
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: Script a ejecutar
+        type: choice
+        required: true
+        default: notificar
+        options:
+          - notificar
+          - verificar
+
+permissions:
+  contents: read
+
+jobs:
+  ejecutar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Preparar Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias
+        working-directory: tools
+        run: npm install --no-audit --no-fund
+
+      - name: Ejecutar ${{ inputs.modo || 'notificar' }}
+        working-directory: tools
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node ${{ inputs.modo || 'notificar' }}.mjs

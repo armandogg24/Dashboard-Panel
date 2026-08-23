@@ -1,0 +1,10 @@
+{
+  "name": "panel-tools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Scripts de verificación y notificaciones (se ejecutan SOLO en GitHub Actions)",
+  "dependencies": {
+    "firebase-admin": "^12.1.0"
+  }
+}

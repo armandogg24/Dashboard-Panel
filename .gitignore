@@ -1,0 +1,46 @@
+# ==============================================================
+# POR DEFECTO NO SE SUBE NADA.
+# Únicamente se permite subir lo listado abajo con !ruta/archivo
+#
+# IMPORTANTE: este filtro solo funciona con Git (CLI o GitHub
+# Desktop). Si subes archivos arrastrándolos en github.com,
+# el .gitignore NO filtra nada: debes elegir los archivos tú.
+# ==============================================================
+
+
+*
+*.*
+
+
+# --------------------------------------------------------------
+# Necesario técnicamente: si una carpeta está ignorada, Git no
+# puede entrar a ella para evaluar las excepciones internas.
+# Esto habilita SOLO el recorrido, no sube su contenido.
+# --------------------------------------------------------------
+!*/
+
+
+# --------------------------------------------------------------
+# RAÍZ
+# --------------------------------------------------------------
+!.gitignore
+!/index.html
+!/README.md
+
+
+# --------------------------------------------------------------
+# FRONTEND
+# --------------------------------------------------------------
+!/css/styles.css
+!/js/app.js
+!/js/db.js
+!/js/config.js
+
+
+# --------------------------------------------------------------
+# AUTOMATIZACIÓN (GitHub Actions)
+# --------------------------------------------------------------
+!/tools/notificar.mjs
+!/tools/verificar.mjs
+!/tools/package.json
+!/.github/workflows/mantenimiento.yml
