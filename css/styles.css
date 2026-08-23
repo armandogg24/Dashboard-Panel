@@ -283,7 +283,11 @@ main {
 .saldo-chip { color: var(--ok); font-weight: 700; }
 
 dialog {
+  margin: auto;
   width: min(30rem, calc(100vw - 2rem));
+  max-height: 86vh;
+  max-height: min(86dvh, 100%);
+  overflow-y: auto;
   border: 1px solid var(--glass-borde);
   border-radius: var(--radio);
   background: var(--bg-2);
@@ -291,9 +295,11 @@ dialog {
   padding: clamp(1.2rem, 3vw, 1.8rem);
   box-shadow: var(--sombra);
 }
+dialog[open] { animation: dlg-in .24s cubic-bezier(.2, .9, .3, 1.2) both; }
 dialog::backdrop {
   background: rgba(4, 7, 12, .72);
   backdrop-filter: blur(4px);
+  animation: fade-in .22s ease-out both;
 }
 dialog h2 { margin-bottom: 1.1rem; font-size: 1.15rem; }
 .fila-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
@@ -335,6 +341,11 @@ dialog h2 { margin-bottom: 1.1rem; font-size: 1.15rem; }
 .toast.ok { border-color: rgba(52, 211, 153, .5); }
 .toast.err { border-color: rgba(248, 113, 113, .55); }
 @keyframes entrar { from { opacity: 0; transform: translateY(8px); } }
+@keyframes dlg-in {
+  from { opacity: 0; transform: translateY(16px) scale(.96); }
+}
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes subir { from { opacity: 0; transform: translateY(18px); } }
 
 .aviso {
   position: relative;
@@ -349,6 +360,50 @@ dialog h2 { margin-bottom: 1.1rem; font-size: 1.15rem; }
 }
 .aviso ul { margin: .5rem 0 0 1.2rem; }
 .aviso code { background: rgba(0, 0, 0, .3); padding: .05rem .4rem; border-radius: 6px; }
+
+/* ---------- Pulido visual extra ---------- */
+
+::selection { background: rgba(99, 102, 241, .45); }
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .18) transparent;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .16);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .28); }
+
+.tarjeta-login { animation: subir .5s ease-out both; }
+.seccion { animation: subir .35s ease-out both; }
+
+input:hover { border-color: rgba(255, 255, 255, .24); }
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(.8);
+  cursor: pointer;
+}
+
+.btn:active { transform: translateY(0) scale(.97); }
+
+.stat,
+.lista-prox li,
+.lista-top li {
+  transition: border-color .2s, background .2s, transform .2s;
+}
+.stat:hover {
+  border-color: rgba(99, 102, 241, .45);
+  transform: translateY(-2px);
+}
+.lista-prox li:hover,
+.lista-top li:hover {
+  background: rgba(255, 255, 255, .07);
+  border-color: var(--glass-borde);
+}
+
+.tabla tbody tr.cancelada td { opacity: .55; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }

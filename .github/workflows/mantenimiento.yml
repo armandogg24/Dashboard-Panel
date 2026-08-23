@@ -2,7 +2,8 @@ name: Mantenimiento
 
 on:
   schedule:
-    - cron: "0 14 * * *"
+    # 07:30 hora Buenos Aires (ART, UTC-3 todo el año) = 10:30 UTC
+    - cron: "30 10 * * *"
   workflow_dispatch:
     inputs:
       modo:

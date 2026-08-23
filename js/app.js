@@ -159,7 +159,7 @@ function renderTabla() {
     const accionCancel = esCancelado(s)
       ? { acc: "reactivar", txt: "Reactivar" }
       : { acc: "cancelar", txt: "Cancelar" };
-    return `<tr><td><strong>${escapar(s.nombre)}</strong><br>
+    return `<tr${esCancelado(s) ? ' class="cancelada"' : ""}><td><strong>${escapar(s.nombre)}</strong><br>
       <span class="codigo-chip">${s.referral_code}</span></td>
       <td>${escapar(s.plan || "—")}</td>
       <td>${formatearFecha(s.fecha_vencimiento)}</td>
