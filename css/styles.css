@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --bg: #0a0e17;
   --bg-2: #101627;
   --glass: rgba(255, 255, 255, .055);
@@ -100,6 +101,28 @@ input:focus-visible {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, .3);
 }
 
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: #141a29;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2393a0b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .85rem center;
+  background-size: .95rem;
+  padding-right: 2.5rem;
+  cursor: pointer;
+}
+select:hover { border-color: rgba(255, 255, 255, .24); }
+select:focus-visible {
+  outline: none;
+  border-color: var(--c-primario);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, .3);
+}
+select option {
+  background-color: #141a29;
+  color: var(--texto);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -179,7 +202,7 @@ main {
   margin-bottom: 1rem;
   letter-spacing: .01em;
 }
-.bloque-angosto { max-width: 34rem; }
+.bloque-angosto { max-width: 34rem; margin-inline: auto; }
 
 .lista-prox { list-style: none; display: grid; gap: .5rem; }
 .lista-prox li {
@@ -382,7 +405,6 @@ dialog h2 { margin-bottom: 1.1rem; font-size: 1.15rem; }
 
 input:hover { border-color: rgba(255, 255, 255, .24); }
 input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(.8);
   cursor: pointer;
 }
 
@@ -406,6 +428,11 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .tabla tbody tr.cancelada td { opacity: .55; }
 
 .col-vendedor { white-space: nowrap; }
+.col-precio {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
 .chip-vend {
   font-size: .78em;
   background: rgba(251, 191, 36, .12);
@@ -425,6 +452,57 @@ body[data-rol="vendedor"] .col-vendedor { display: none; }
 }
 
 .b-suspendido { background: rgba(148, 163, 184, .16); color: #cbd5e1; }
+
+#di-pasos-ios {
+  margin: .7rem 0 .2rem 1.2rem;
+  display: grid;
+  gap: .35rem;
+  font-size: .92rem;
+}
+#di-pasos-ios strong { color: var(--texto); }
+
+@media (max-width: 48rem) {
+  .scroll-x { overflow-x: visible; }
+  .tabla { display: block; width: 100%; }
+  .tabla thead { display: none; }
+  .tabla tbody { display: block; }
+  .tabla tbody tr {
+    display: block;
+    margin-bottom: .8rem;
+    padding: .55rem .85rem;
+    border: 1px solid var(--glass-borde);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .03);
+  }
+  .tabla tbody tr:last-child { margin-bottom: 0; }
+  .tabla td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .4rem 1rem;
+    border-top: none;
+    padding: .42rem 0;
+  }
+  .tabla td + td { border-top: 1px solid rgba(255, 255, 255, .055); }
+  .tabla td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: .72em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    flex-shrink: 0;
+  }
+  .tabla td:first-child {
+    font-size: 1.02em;
+    padding-block: .2rem .55rem;
+  }
+  .tabla td:first-child::before {
+    content: none;
+  }
+  .in-chat { width: 8.5rem; text-align: right; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }

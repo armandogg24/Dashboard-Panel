@@ -40,6 +40,14 @@ const nombreDe = (id) => {
   return esAdmin() ? "(eliminado)" : "(de otro vendedor)";
 };
 
+function formatoPesos(valor) {
+  const num = Number(valor);
+  if (!isFinite(num)) return null;
+  const [ent, dec] = num.toFixed(2).split(".");
+  const miles = ent.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return "$" + (dec === "00" ? miles : `${miles},${dec}`);
+}
+
 function toast(mensaje, tipo = "ok") {
   const t = document.createElement("div");
   t.className = `toast ${tipo}`;
@@ -202,15 +210,17 @@ function renderTabla() {
     const vend = nombreVendedor(s.vendedor_id);
     const vendCell = vend
       ? `<span class="chip-vend">${escapar(vend)}</span>` : '<span class="muted">—</span>';
-    return `<tr${esCancelado(s) ? ' class="cancelada"' : ""}><td><strong>${escapar(s.nombre)}</strong><br>
+    return `<tr${esCancelado(s) ? ' class="cancelada"' : ""}>
+      <td data-label="Nombre"><strong>${escapar(s.nombre)}</strong><br>
       <span class="codigo-chip">${s.referral_code}</span></td>
-      <td>${escapar(s.plan || "—")}</td>
-      <td>${formatearFecha(s.fecha_vencimiento)}</td>
-      <td><span class="badge ${est.cls}">${est.label}</span></td>
-      <td class="col-vendedor">${vendCell}</td>
-      <td>${refBy}</td>
-      <td>${saldo}</td>
-      <td><div class="acciones">
+      <td data-label="Plan">${escapar(s.plan || "—")}</td>
+      <td data-label="Precio" class="col-precio">${formatoPesos(s.precio) ?? "—"}</td>
+      <td data-label="Vence">${formatearFecha(s.fecha_vencimiento)}</td>
+      <td data-label="Estado"><span class="badge ${est.cls}">${est.label}</span></td>
+      <td data-label="Vendedor" class="col-vendedor">${vendCell}</td>
+      <td data-label="Referido por">${refBy}</td>
+      <td data-label="Saldo">${saldo}</td>
+      <td data-label="Acciones"><div class="acciones">
         <button class="btn btn-mini" data-accion="editar" data-id="${s.id}">Editar</button>
         <button class="btn btn-mini btn-primario" data-accion="renovar" data-id="${s.id}">Renovar</button>
         <button class="btn btn-mini btn-fantasma" data-accion="${accionCancel.acc}" data-id="${s.id}">${accionCancel.txt}</button>
@@ -222,11 +232,11 @@ function renderTabla() {
 
 function renderReferidos() {
   $("tb-refs").innerHTML = state.refs.map(r => `
-    <tr><td>${formatearFecha(r.fecha)}</td>
-    <td>${escapar(nombreDe(r.referente))}</td>
-    <td>${saldoVigente(r.referente)}</td>
-    <td>${escapar(nombreDe(r.referido))}</td>
-    <td>${r.porcentaje}%</td></tr>`).join("");
+    <tr><td data-label="Fecha">${formatearFecha(r.fecha)}</td>
+    <td data-label="Referente">${escapar(nombreDe(r.referente))}</td>
+    <td data-label="Saldo actual">${saldoVigente(r.referente)}</td>
+    <td data-label="Referido">${escapar(nombreDe(r.referido))}</td>
+    <td data-label="% otorgado">${r.porcentaje}%</td></tr>`).join("");
   $("refs-vacio").classList.toggle("oculto", state.refs.length > 0);
 
   const conteo = {};
@@ -255,13 +265,13 @@ function renderVendedores() {
       ? '<span class="badge b-activo">Activo</span>'
       : '<span class="badge b-suspendido">Suspendido</span>';
     const accion = v.activo ? "Suspender" : "Reactivar";
-    return `<tr><td><strong>${escapar(v.nombre)}</strong></td>
-      <td class="muted">${escapar(v.email || "—")}</td>
-      <td>${badge}</td>
-      <td>${clientesDe(v.id)}</td>
-      <td><input type="text" class="in-chat" data-chat="${v.id}"
+    return `<tr><td data-label="Nombre"><strong>${escapar(v.nombre)}</strong></td>
+      <td data-label="Email" class="muted">${escapar(v.email || "—")}</td>
+      <td data-label="Estado">${badge}</td>
+      <td data-label="Clientes">${clientesDe(v.id)}</td>
+      <td data-label="Telegram"><input type="text" class="in-chat" data-chat="${v.id}"
            value="${escapar(v.telegram_chat_id || "")}" placeholder="chat_id"></td>
-      <td><div class="acciones">
+      <td data-label="Acciones"><div class="acciones">
         <button class="btn btn-mini btn-fantasma" data-vacc="guardar-chat" data-uid="${v.id}">Guardar chat</button>
         <button class="btn btn-mini btn-fantasma" data-vacc="${v.activo ? "suspender" : "reactivar"}" data-uid="${v.id}">${accion}</button>
         <button class="btn btn-mini btn-peligro" data-vacc="borrar" data-uid="${v.id}">Borrar</button>
@@ -336,7 +346,7 @@ function actualizarCobroSugerido() {
   const saldo = s.descuento_acumulado || 0;
   const cobro = sugerirCobro(s.precio, meses, saldo);
   $("r-cobro").textContent = s.precio > 0
-    ? `Precio $${s.precio} × ${meses} mes(es) − ${saldo}% ⇒ cobro sugerido: $${cobro}`
+    ? `Precio ${formatoPesos(s.precio)} × ${meses} mes(es) − ${saldo}% ⇒ cobro sugerido: ${formatoPesos(cobro)}`
     : "Sin precio definido: el descuento quedará registrado solo como historial.";
 }
 
@@ -485,7 +495,7 @@ function conectarEventos() {
       $("dlg-renovar").close();
       let msg = `Renovado hasta ${formatearFecha(res.nuevoVencimiento)}.`;
       if (res.saldo > 0) msg += ` Se aplicó ${res.saldo}% (saldo reiniciado).`;
-      if (res.cobroSugerido != null) msg += ` Cobro sugerido: $${res.cobroSugerido}`;
+      if (res.cobroSugerido != null) msg += ` Cobro sugerido: ${formatoPesos(res.cobroSugerido)}`;
       toast(msg);
       await recargarDatos();
     } catch (ex) {

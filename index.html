@@ -85,7 +85,7 @@
       <div class="glass bloque">
         <div class="scroll-x">
           <table class="tabla">
-            <thead><tr><th>Nombre</th><th>Plan</th><th>Vence</th><th>Estado</th><th class="col-vendedor">Vendedor</th><th>Referido por</th><th>Saldo</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Plan</th><th>Precio</th><th>Vence</th><th>Estado</th><th class="col-vendedor">Vendedor</th><th>Referido por</th><th>Saldo</th><th>Acciones</th></tr></thead>
             <tbody id="tb-subs"></tbody>
           </table>
         </div>
@@ -225,6 +225,20 @@
   </form>
 </dialog>
 
+<dialog id="dlg-instalar">
+  <h2>¿Instalar la aplicación?</h2>
+  <p id="di-descripcion" class="muted">Accedé al panel desde tu pantalla de inicio como una app y usalo incluso sin conexión.</p>
+  <ol id="di-pasos-ios" class="oculto">
+    <li>Tocá el botón <strong>Compartir</strong> (↑)</li>
+    <li>Elegí <strong>Agregar a inicio</strong></li>
+    <li>Confirmá con <strong>Agregar</strong></li>
+  </ol>
+  <div class="dialogo-acciones">
+    <button type="button" id="btn-ahora-no" class="btn btn-fantasma">Ahora no</button>
+    <button type="button" id="btn-confirmar-instalar" class="btn btn-primario">Instalar</button>
+  </div>
+</dialog>
+
 <div id="toasts" aria-live="polite"></div>
 
 <noscript><p style="padding:2rem;text-align:center">Este panel requiere JavaScript habilitado.</p></noscript>
@@ -234,6 +248,67 @@
     window.addEventListener("load", () =>
       navigator.serviceWorker.register("sw.js").catch(() => {}));
   }
+
+  (function () {
+    const CLAVE_SUPRESION = "instalar_oculto_hasta";
+    const UNA_SEMANA = 7 * 24 * 60 * 60 * 1000;
+
+    const dlg = document.getElementById("dlg-instalar");
+    const descripcion = document.getElementById("di-descripcion");
+    const pasosIOS = document.getElementById("di-pasos-ios");
+    const btnInstalar = document.getElementById("btn-confirmar-instalar");
+
+    let eventoInstalar = null;
+    let yaMostrado = false;
+
+    const esStandalone = () =>
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true;
+
+    const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+    function suprimidoUnaSemana() {
+      const hasta = Number(localStorage.getItem(CLAVE_SUPRESION) || 0);
+      return Date.now() < hasta;
+    }
+
+    function mostrarPopup() {
+      if (yaMostrado || esStandalone() || suprimidoUnaSemana()) return;
+      yaMostrado = true;
+      if (esIOS) {
+        btnInstalar.classList.add("oculto");
+        pasosIOS.classList.remove("oculto");
+        descripcion.textContent = "En iPhone la instalación se hace desde el menú compartir:";
+      }
+      dlg.showModal();
+    }
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      eventoInstalar = e;
+      setTimeout(mostrarPopup, 900);
+    });
+
+    if (esIOS) setTimeout(mostrarPopup, 1400);
+
+    btnInstalar.addEventListener("click", async () => {
+      if (!eventoInstalar) return;
+      eventoInstalar.prompt();
+      await eventoInstalar.userChoice;
+      eventoInstalar = null;
+      dlg.close();
+    });
+
+    document.getElementById("btn-ahora-no").addEventListener("click", () => {
+      localStorage.setItem(CLAVE_SUPRESION, String(Date.now() + UNA_SEMANA));
+      dlg.close();
+    });
+
+    window.addEventListener("appinstalled", () => {
+      eventoInstalar = null;
+      dlg.close();
+    });
+  })();
 </script>
 <script type="module" src="js/app.js"></script>
 </body>
